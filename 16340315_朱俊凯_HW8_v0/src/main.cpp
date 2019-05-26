@@ -37,7 +37,15 @@ class location{
         x=x1;
         y=y1;
     }
+    location operator+(const location& b)
+    {
+        location loc(this->x+b.x,this->y+b.y);
+        return loc;
+    }
 };
+location operator*(double a, location &c){
+    return location(a*c.x, a*c.y);
+}
 
 //初始化
 GLFWwindow* window_init();
@@ -54,7 +62,7 @@ void onMouseButton(GLFWwindow* window, int button, int action , int mods) ;
 int setup_Circle(unsigned int &VAO,unsigned int &VBO,int shaderProgram,float circle_r);
 void plotCirclePixel(int cx, int cy,int x, int y,vector<location>& points);
 int set_BezierLine(unsigned int &VAO,unsigned int &VBO,int shaderProgram);
-int set_BezierPointsline(unsigned int &VAO,unsigned int &VBO,int shaderProgram);
+int set_BezierPointsline(unsigned int &VAO,unsigned int &VBO,int shaderProgram,double t);
 
 unsigned long cnr(int n, int r);
 
@@ -143,16 +151,19 @@ int main(int, char**)
         
         
         // 渲染. 所有OpenGL的代码放在这儿
+        float time_counter=fmod(glfwGetTime(),2.0f)/2;
         if(Bezier_points.size()>1){
-            BezierPointsline_size=set_BezierPointsline(VAO1, VBO1, shaderProgram);
+            BezierPointsline_size=set_BezierPointsline(VAO1, VBO1, shaderProgram,time_counter);
             glBindVertexArray(VAO1);
-            glDrawArrays(GL_LINES, 0,BezierPointsline_size);
+            glDrawArrays(GL_LINES, 0,BezierPointsline_size-1);
+            glPointSize(8);
+            glDrawArrays(GL_POINTS, 0,BezierPointsline_size);
+            glPointSize(1);
         }
         if(Point_changed){
             BezierLine_size=set_BezierLine(VAO, VBO, shaderProgram);
             Point_changed=false;
         }
-        float time_counter=fmod(glfwGetTime(),2.0f)/2;
         glBindVertexArray(VAO);
         glDrawArrays(GL_POINTS, 0,(int)BezierLine_size*time_counter);
         
@@ -248,10 +259,35 @@ int set_BezierLine(unsigned int &VAO,unsigned int &VBO,int shaderProgram){
     
     return points.size();
 }
-int set_BezierPointsline(unsigned int &VAO,unsigned int &VBO,int shaderProgram){
-    float vertices[(Bezier_points.size()*2)*6];
+int set_BezierPointsline(unsigned int &VAO,unsigned int &VBO,int shaderProgram,double t){
+    vector<location> first;
+    vector<location> next;
+    vector<location> all;
+    for (std::vector<location>::iterator it = Bezier_points.begin(); it != Bezier_points.end(); ++it){
+        first.push_back(*it);
+    }
+    double t_1=1-t;
+    location line_top(0,0),line_end(0,0);
+    while(1){
+        next.clear();
+        for(int i=0;i<first.size()-1;i++){
+            line_top=first[i];line_end=first[i+1];
+            next.push_back(t_1*line_top+t*line_end);
+            all.push_back(line_top);
+            all.push_back(line_end);
+        }
+        first.clear();
+        first=next;
+        if(next.size()<=1){
+            if(next.size()==1)all.push_back(next[0]);
+            first.clear();
+            next.clear();
+            break;
+        }
+    }
+    float vertices[all.size()*6];
     int index=0;
-    for (std::vector<location>::iterator it = Bezier_points.begin(); it != Bezier_points.end(); ++it)
+    for (std::vector<location>::iterator it = all.begin(); it != all.end(); ++it)
     {
         vertices[index]=(*it).x;
         vertices[index+1]=(*it).y;
@@ -260,15 +296,6 @@ int set_BezierPointsline(unsigned int &VAO,unsigned int &VBO,int shaderProgram){
         vertices[index+4]=0.2f;
         vertices[index+5]=0.2f;
         index+=6;
-        if(it!=Bezier_points.begin()){
-            vertices[index]=(*it).x;
-            vertices[index+1]=(*it).y;
-            vertices[index+2]=0;
-            vertices[index+3]=0.2f;
-            vertices[index+4]=0.2f;
-            vertices[index+5]=0.2f;
-            index+=6;
-        }
     }
     glBindVertexArray(VAO);
     
@@ -280,7 +307,7 @@ int set_BezierPointsline(unsigned int &VAO,unsigned int &VBO,int shaderProgram){
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
     
-    return (Bezier_points.size()*2-2);
+    return all.size();
 }
 unsigned long cnr(int n, int r)
 {
